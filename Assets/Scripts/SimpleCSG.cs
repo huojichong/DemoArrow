@@ -1,9 +1,11 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// 简化版 CSG 实现 - 适用于立方体的布尔合并
 /// 基于 BSP 树的思想，但简化为只处理轴对齐的立方体
+/// v2.0 - 增强版：去除内部顶点和面
 /// </summary>
 public class SimpleCSG
 {
@@ -33,8 +35,8 @@ public class SimpleCSG
             return SimpleCombine(mf1, mf2, obj1.transform, obj2.transform);
         }
 
-        // 有交集，进行简化的 CSG 合并
-        return UnionWithIntersection(mf1, mf2, obj1.transform, obj2.transform, bounds1, bounds2);
+        // 有交集，进行增强的 CSG 合并
+        return UnionWithIntersectionEnhanced(mf1, mf2, obj1.transform, obj2.transform, bounds1, bounds2);
     }
 
     private static Bounds GetWorldBounds(GameObject obj)
@@ -67,9 +69,11 @@ public class SimpleCSG
         return result;
     }
 
-    private static Mesh UnionWithIntersection(MeshFilter mf1, MeshFilter mf2, Transform t1, Transform t2, Bounds b1, Bounds b2)
+    /// <summary>
+    /// 增强版合并：去除内部顶点和面
+    /// </summary>
+    private static Mesh UnionWithIntersectionEnhanced(MeshFilter mf1, MeshFilter mf2, Transform t1, Transform t2, Bounds b1, Bounds b2)
     {
-        // 简化版：移除内部面
         List<Vector3> vertices = new List<Vector3>();
         List<int> triangles = new List<int>();
         List<Vector3> normals = new List<Vector3>();
@@ -78,10 +82,13 @@ public class SimpleCSG
         Bounds intersection = GetIntersection(b1, b2);
 
         // 处理第一个 mesh
-        AddMeshWithCulling(mf1.sharedMesh, t1, intersection, vertices, triangles, normals, true);
+        AddMeshWithCulling(mf1.sharedMesh, t1, intersection, b2, vertices, triangles, normals, true);
 
         // 处理第二个 mesh
-        AddMeshWithCulling(mf2.sharedMesh, t2, intersection, vertices, triangles, normals, false);
+        AddMeshWithCulling(mf2.sharedMesh, t2, intersection, b1, vertices, triangles, normals, false);
+
+        // 去除重复顶点
+        RemoveDuplicateVertices(ref vertices, ref triangles, ref normals);
 
         Mesh result = new Mesh();
         result.vertices = vertices.ToArray();
@@ -103,7 +110,7 @@ public class SimpleCSG
         return new Bounds(center, size);
     }
 
-    private static void AddMeshWithCulling(Mesh mesh, Transform transform, Bounds cullBounds,
+    private static void AddMeshWithCulling(Mesh mesh, Transform transform, Bounds cullBounds, Bounds otherBounds,
         List<Vector3> vertices, List<int> triangles, List<Vector3> normals, bool isFirst)
     {
         Vector3[] meshVerts = mesh.vertices;
@@ -126,17 +133,10 @@ public class SimpleCSG
             // 计算三角形中心
             Vector3 triCenter = (v0 + v1 + v2) / 3f;
 
-            // 如果三角形在交集区域内，跳过（剔除内部面）
-            if (cullBounds.Contains(triCenter))
+            // 检查三角形是否应该被剔除
+            if (ShouldCullTriangle(triCenter, v0, v1, v2, transform, meshNormals[i0], cullBounds, otherBounds, isFirst))
             {
-                // 简化判断：如果三角形中心在交集内，检查法线方向
-                Vector3 normal = transform.TransformDirection(meshNormals[i0]);
-
-                // 如果法线指向内部，跳过这个三角形
-                if (IsInternalFace(triCenter, normal, cullBounds, isFirst))
-                {
-                    continue;
-                }
+                continue;
             }
 
             // 添加顶点和三角形
@@ -156,13 +156,91 @@ public class SimpleCSG
         }
     }
 
-    private static bool IsInternalFace(Vector3 faceCenter, Vector3 normal, Bounds intersection, bool isFirst)
+    /// <summary>
+    /// 判断三角形是否应该被剔除
+    /// </summary>
+    private static bool ShouldCullTriangle(Vector3 triCenter, Vector3 v0, Vector3 v1, Vector3 v2,
+        Transform transform, Vector3 localNormal, Bounds intersection, Bounds otherBounds, bool isFirst)
     {
-        // 简化判断：如果法线指向交集中心，则认为是内部面
-        Vector3 toCenter = intersection.center - faceCenter;
-        float dot = Vector3.Dot(normal, toCenter.normalized);
+        // 如果三角形中心在交集区域内
+        if (intersection.Contains(triCenter))
+        {
+            Vector3 normal = transform.TransformDirection(localNormal);
 
-        // 如果法线指向交集内部，则是内部面
-        return dot > 0.1f;
+            // 检查法线是否指向交集内部
+            Vector3 toCenter = intersection.center - triCenter;
+            float dot = Vector3.Dot(normal, toCenter.normalized);
+
+            // 如果法线指向交集内部，剔除这个三角形
+            if (dot > 0.1f)
+            {
+                return true;
+            }
+        }
+
+        // 检查三角形的所有顶点是否都在另一个对象内部
+        if (otherBounds.Contains(v0) && otherBounds.Contains(v1) && otherBounds.Contains(v2))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 去除重复的顶点
+    /// </summary>
+    private static void RemoveDuplicateVertices(ref List<Vector3> vertices, ref List<int> triangles, ref List<Vector3> normals)
+    {
+        Dictionary<Vector3, int> vertexMap = new Dictionary<Vector3, int>(new Vector3EqualityComparer());
+        List<Vector3> newVertices = new List<Vector3>();
+        List<Vector3> newNormals = new List<Vector3>();
+        List<int> newTriangles = new List<int>();
+
+        for (int i = 0; i < triangles.Count; i++)
+        {
+            int oldIndex = triangles[i];
+            Vector3 vertex = vertices[oldIndex];
+            Vector3 normal = normals[oldIndex];
+
+            int newIndex;
+            if (!vertexMap.TryGetValue(vertex, out newIndex))
+            {
+                newIndex = newVertices.Count;
+                vertexMap[vertex] = newIndex;
+                newVertices.Add(vertex);
+                newNormals.Add(normal);
+            }
+
+            newTriangles.Add(newIndex);
+        }
+
+        vertices = newVertices;
+        normals = newNormals;
+        triangles = newTriangles;
+
+        Debug.Log($"顶点优化：{vertexMap.Count} 个唯一顶点（原始：{vertices.Count}）");
+    }
+
+    /// <summary>
+    /// Vector3 相等比较器（用于去重）
+    /// </summary>
+    private class Vector3EqualityComparer : IEqualityComparer<Vector3>
+    {
+        private const float Epsilon = 0.0001f;
+
+        public bool Equals(Vector3 a, Vector3 b)
+        {
+            return Vector3.Distance(a, b) < Epsilon;
+        }
+
+        public int GetHashCode(Vector3 v)
+        {
+            // 将坐标量化到网格上以提高哈希效率
+            int x = Mathf.RoundToInt(v.x / Epsilon);
+            int y = Mathf.RoundToInt(v.y / Epsilon);
+            int z = Mathf.RoundToInt(v.z / Epsilon);
+            return x ^ (y << 10) ^ (z << 20);
+        }
     }
 }

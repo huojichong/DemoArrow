@@ -1,12 +1,8 @@
 using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 /// <summary>
 /// CSG 立方体合并演示 - 集成所有合并方案
-/// 1. 简单合并（Unity 原生）
-/// 2. SimpleCSG 合并（简化 CSG 算法）
+/// 只包含测试逻辑和 UI，具体实现在独立的类中
 /// </summary>
 public class CSGCubeMergeDemo : MonoBehaviour
 {
@@ -34,28 +30,32 @@ public class CSGCubeMergeDemo : MonoBehaviour
 
     void Start()
     {
-        // 初始化材质 - 使用透明玻璃材质
+        InitializeMaterials();
+    }
+
+    /// <summary>
+    /// 初始化材质
+    /// </summary>
+    private void InitializeMaterials()
+    {
         if (cube1Material == null)
         {
             cube1Material = GlassMaterialCreator.CreateGlassMaterial(
-                new Color(1f, 0.3f, 0.3f, 0.4f), // 红色玻璃
-                0.9f, 0.1f
+                new Color(1f, 0.3f, 0.3f, 0.4f), 0.9f, 0.1f
             );
         }
 
         if (cube2Material == null)
         {
             cube2Material = GlassMaterialCreator.CreateGlassMaterial(
-                new Color(0.3f, 0.3f, 1f, 0.4f), // 蓝色玻璃
-                0.9f, 0.1f
+                new Color(0.3f, 0.3f, 1f, 0.4f), 0.9f, 0.1f
             );
         }
 
         if (mergedMaterial == null)
         {
             mergedMaterial = GlassMaterialCreator.CreateGlassMaterial(
-                new Color(0.3f, 1f, 0.3f, 0.5f), // 绿色玻璃
-                0.95f, 0.1f
+                new Color(0.3f, 1f, 0.3f, 0.5f), 0.95f, 0.1f
             );
         }
     }
@@ -67,14 +67,12 @@ public class CSGCubeMergeDemo : MonoBehaviour
     {
         ClearAll();
 
-        // 创建第一个立方体
         cube1 = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube1.name = "Cube1";
         cube1.transform.position = cube1Position;
         cube1.transform.localScale = cube1Size;
         cube1.GetComponent<MeshRenderer>().material = cube1Material;
 
-        // 创建第二个立方体
         cube2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube2.name = "Cube2";
         cube2.transform.position = cube2Position;
@@ -91,36 +89,19 @@ public class CSGCubeMergeDemo : MonoBehaviour
     /// </summary>
     public void MergeWithSimpleCSG()
     {
-        if (cube1 == null || cube2 == null)
-        {
-            Debug.LogWarning("请先创建立方体！按 C 键创建");
-            return;
-        }
+        if (!ValidateCubes()) return;
 
         Debug.Log("开始 SimpleCSG 合并...");
 
         try
         {
-            // 使用简化版 CSG 进行合并
             Mesh mergedMesh = SimpleCSG.Union(cube1, cube2);
 
             if (mergedMesh != null)
             {
-                // 创建合并后的对象
-                mergedObject = new GameObject("MergedCube_SimpleCSG");
-                MeshFilter mf = mergedObject.AddComponent<MeshFilter>();
-                MeshRenderer mr = mergedObject.AddComponent<MeshRenderer>();
-
-                mf.mesh = mergedMesh;
-                mr.material = mergedMaterial;
-
-                // 隐藏原始立方体
-                cube1.SetActive(false);
-                cube2.SetActive(false);
-
+                CreateMergedObject(mergedMesh, "MergedCube_SimpleCSG");
                 Debug.Log("✓ SimpleCSG 合并成功！");
-                Debug.Log($"  顶点数: {mergedMesh.vertexCount}");
-                Debug.Log($"  三角形数: {mergedMesh.triangles.Length / 3}");
+                LogMeshInfo(mergedMesh);
             }
             else
             {
@@ -134,143 +115,179 @@ public class CSGCubeMergeDemo : MonoBehaviour
     }
 
     /// <summary>
-    /// 方案2：简单合并（Unity 原生，不去除交集）
+    /// 方案2：使用 Unity 原生合并（不去除交集）
     /// </summary>
-    public void SimpleMerge()
+    public void MergeWithUnityNative()
     {
-        if (cube1 == null || cube2 == null)
+        if (!ValidateCubes()) return;
+
+        Debug.Log("开始 Unity 原生合并...");
+
+        try
         {
-            Debug.LogWarning("请先创建立方体！按 C 键创建");
-            return;
+            Mesh mergedMesh = UnityNativeMeshCombiner.Combine(cube1, cube2);
+
+            if (mergedMesh != null)
+            {
+                CreateMergedObject(mergedMesh, "MergedCube_UnityNative");
+                Debug.Log("✓ Unity 原生合并成功！");
+                LogMeshInfo(mergedMesh);
+            }
+            else
+            {
+                Debug.LogError("Unity 原生合并失败！");
+            }
         }
-
-        Debug.Log("开始简单合并...");
-
-        MeshFilter mf1 = cube1.GetComponent<MeshFilter>();
-        MeshFilter mf2 = cube2.GetComponent<MeshFilter>();
-
-        CombineInstance[] combine = new CombineInstance[2];
-        combine[0].mesh = mf1.sharedMesh;
-        combine[0].transform = cube1.transform.localToWorldMatrix;
-        combine[1].mesh = mf2.sharedMesh;
-        combine[1].transform = cube2.transform.localToWorldMatrix;
-
-        mergedObject = new GameObject("MergedCube_Simple");
-        MeshFilter mergedMF = mergedObject.AddComponent<MeshFilter>();
-        MeshRenderer mergedMR = mergedObject.AddComponent<MeshRenderer>();
-
-        Mesh mergedMesh = new Mesh();
-        mergedMesh.CombineMeshes(combine, true, true);
-        mergedMesh.RecalculateNormals();
-        mergedMesh.RecalculateBounds();
-        mergedMesh.Optimize();
-
-        mergedMF.mesh = mergedMesh;
-        mergedMR.material = mergedMaterial;
-
-        cube1.SetActive(false);
-        cube2.SetActive(false);
-
-        Debug.Log("✓ 简单合并成功！");
-        Debug.Log($"  顶点数: {mergedMesh.vertexCount}");
-        Debug.Log($"  三角形数: {mergedMesh.triangles.Length / 3}");
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Unity 原生合并时出错: {e.Message}\n{e.StackTrace}");
+        }
     }
 
     /// <summary>
-    /// 保存合并后的 Mesh 为资源文件
+    /// 方案3：使用 AdvancedCSG 合并（完全去除内部顶点）
+    /// </summary>
+    public void MergeWithAdvancedCSG()
+    {
+        if (!ValidateCubes()) return;
+
+        Debug.Log("开始 AdvancedCSG 合并...");
+
+        try
+        {
+            Mesh mergedMesh = AdvancedCSG.Union(cube1, cube2);
+
+            if (mergedMesh != null)
+            {
+                CreateMergedObject(mergedMesh, "MergedCube_AdvancedCSG");
+                Debug.Log("✓ AdvancedCSG 合并成功！");
+                LogMeshInfo(mergedMesh);
+            }
+            else
+            {
+                Debug.LogError("AdvancedCSG 合并失败！");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"AdvancedCSG 合并时出错: {e.Message}\n{e.StackTrace}");
+        }
+    }
+
+    /// <summary>
+    /// 方案4：使用 TrueCSG 合并（真正的布尔运算）
+    /// </summary>
+    public void MergeWithTrueCSG()
+    {
+        if (!ValidateCubes()) return;
+
+        Debug.Log("开始 TrueCSG 布尔运算...");
+
+        try
+        {
+            Mesh mergedMesh = TrueCSG.Union(cube1, cube2);
+
+            if (mergedMesh != null)
+            {
+                CreateMergedObject(mergedMesh, "MergedCube_TrueCSG");
+                Debug.Log("✓ TrueCSG 布尔运算成功！");
+                LogMeshInfo(mergedMesh);
+            }
+            else
+            {
+                Debug.LogError("TrueCSG 布尔运算失败！");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"TrueCSG 布尔运算时出错: {e.Message}\n{e.StackTrace}");
+        }
+    }
+
+    /// <summary>
+    /// 方案5：使用 ProBuilder 合并（Unity 官方工具）
+    /// </summary>
+    public void MergeWithProBuilder()
+    {
+        if (!ValidateCubes()) return;
+
+        Debug.Log("开始 ProBuilder 布尔运算...");
+
+        try
+        {
+            Mesh mergedMesh = ProBuilderCSG.Union(cube1, cube2);
+            
+            if (mergedMesh != null)
+            {
+                CreateMergedObject(mergedMesh, "MergedCube_ProBuilder");
+                Debug.Log("✓ ProBuilder 布尔运算成功！");
+                LogMeshInfo(mergedMesh);
+            }
+            else
+            {
+                Debug.LogError("ProBuilder 布尔运算失败！");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"ProBuilder 布尔运算时出错: {e.Message}\n{e.StackTrace}");
+        }
+    }
+
+    /// <summary>
+    /// 保存合并后的 Mesh
     /// </summary>
     public void SaveMergedMesh()
     {
-#if UNITY_EDITOR
         if (mergedObject == null)
         {
             Debug.LogWarning("没有合并后的对象可以保存！请先合并立方体");
             return;
         }
 
-        MeshFilter meshFilter = mergedObject.GetComponent<MeshFilter>();
-        if (meshFilter == null || meshFilter.sharedMesh == null)
-        {
-            Debug.LogError("合并对象没有有效的 Mesh！");
-            return;
-        }
-
-        // 生成文件名（带时间戳）
-        string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string fileName = $"MergedMesh_{timestamp}.asset";
-        string savePath = $"Assets/SavedMeshes/{fileName}";
-
-        // 确保目录存在
-        if (!System.IO.Directory.Exists("Assets/SavedMeshes"))
-        {
-            System.IO.Directory.CreateDirectory("Assets/SavedMeshes");
-        }
-
-        // 创建 Mesh 资源的副本
-        Mesh meshToSave = Object.Instantiate(meshFilter.sharedMesh);
-        meshToSave.name = $"MergedMesh_{timestamp}";
-
-        // 保存为资源文件
-        AssetDatabase.CreateAsset(meshToSave, savePath);
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        Debug.Log($"✓ Mesh 已保存到: {savePath}");
-        Debug.Log($"  顶点数: {meshToSave.vertexCount}");
-        Debug.Log($"  三角形数: {meshToSave.triangles.Length / 3}");
-
-        // 在 Project 窗口中高亮显示
-        EditorGUIUtility.PingObject(meshToSave);
-#else
-        Debug.LogWarning("保存 Mesh 功能仅在编辑器模式下可用");
-#endif
+        MeshSaver.SaveMeshFromGameObject(mergedObject);
     }
 
     /// <summary>
-    /// 保存合并后的 Mesh 和材质为 Prefab
+    /// 保存为 Prefab
     /// </summary>
     public void SaveAsPrefab()
     {
-#if UNITY_EDITOR
         if (mergedObject == null)
         {
             Debug.LogWarning("没有合并后的对象可以保存！请先合并立方体");
             return;
         }
 
-        // 生成文件名（带时间戳）
-        string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string meshFileName = $"MergedMesh_{timestamp}.asset";
-        string prefabFileName = $"MergedCube_{timestamp}.prefab";
-        string meshPath = $"Assets/SavedMeshes/{meshFileName}";
-        string prefabPath = $"Assets/SavedMeshes/{prefabFileName}";
+        MeshSaver.SaveAsPrefab(mergedObject);
+    }
 
-        // 确保目录存在
-        if (!System.IO.Directory.Exists("Assets/SavedMeshes"))
+    /// <summary>
+    /// 导出为 FBX 格式
+    /// </summary>
+    public void ExportAsFBX()
+    {
+        if (mergedObject == null)
         {
-            System.IO.Directory.CreateDirectory("Assets/SavedMeshes");
+            Debug.LogWarning("没有合并后的对象可以导出！请先合并立方体");
+            return;
         }
 
-        // 保存 Mesh
-        MeshFilter meshFilter = mergedObject.GetComponent<MeshFilter>();
-        Mesh meshToSave = Object.Instantiate(meshFilter.sharedMesh);
-        meshToSave.name = $"MergedMesh_{timestamp}";
-        AssetDatabase.CreateAsset(meshToSave, meshPath);
+        MeshSaver.ExportAsFBX(mergedObject);
+    }
 
-        // 创建 Prefab
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(mergedObject, prefabPath);
+    /// <summary>
+    /// 导出为 OBJ 格式（Blender 兼容）
+    /// </summary>
+    public void ExportAsOBJ()
+    {
+        if (mergedObject == null)
+        {
+            Debug.LogWarning("没有合并后的对象可以导出！请先合并立方体");
+            return;
+        }
 
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        Debug.Log($"✓ Prefab 已保存到: {prefabPath}");
-        Debug.Log($"✓ Mesh 已保存到: {meshPath}");
-
-        // 在 Project 窗口中高亮显示
-        EditorGUIUtility.PingObject(prefab);
-#else
-        Debug.LogWarning("保存 Prefab 功能仅在编辑器模式下可用");
-#endif
+        MeshSaver.ExportAsOBJ(mergedObject);
     }
 
     /// <summary>
@@ -289,66 +306,156 @@ public class CSGCubeMergeDemo : MonoBehaviour
         Debug.Log("已清理所有对象");
     }
 
+    #region 辅助方法
+
+    /// <summary>
+    /// 验证立方体是否存在
+    /// </summary>
+    private bool ValidateCubes()
+    {
+        if (cube1 == null || cube2 == null)
+        {
+            Debug.LogWarning("请先创建立方体！按 C 键创建");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 创建合并后的对象
+    /// </summary>
+    private void CreateMergedObject(Mesh mesh, string name)
+    {
+        mergedObject = new GameObject(name);
+        MeshFilter mf = mergedObject.AddComponent<MeshFilter>();
+        MeshRenderer mr = mergedObject.AddComponent<MeshRenderer>();
+
+        mf.mesh = mesh;
+        mr.material = mergedMaterial;
+
+        cube1.SetActive(false);
+        cube2.SetActive(false);
+    }
+
+    /// <summary>
+    /// 输出 Mesh 信息
+    /// </summary>
+    private void LogMeshInfo(Mesh mesh)
+    {
+        Debug.Log($"  顶点数: {mesh.vertexCount}");
+        Debug.Log($"  三角形数: {mesh.triangles.Length / 3}");
+    }
+
+    #endregion
+
+    #region 输入处理
+
     void Update()
     {
-        // C 键：创建立方体
         if (Input.GetKeyDown(KeyCode.C))
         {
             CreateCubes();
         }
 
-        // 1 键：SimpleCSG 合并
         if (Input.GetKeyDown(KeyCode.Alpha1))
         {
             MergeWithSimpleCSG();
         }
 
-        // 2 键：简单合并
         if (Input.GetKeyDown(KeyCode.Alpha2))
         {
-            SimpleMerge();
+            MergeWithUnityNative();
         }
 
-        // M 键：保存 Mesh
+        if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            MergeWithAdvancedCSG();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Alpha4))
+        {
+            MergeWithTrueCSG();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Alpha5))
+        {
+            MergeWithProBuilder();
+        }
+
         if (Input.GetKeyDown(KeyCode.M))
         {
             SaveMergedMesh();
         }
 
-        // P 键：保存为 Prefab
         if (Input.GetKeyDown(KeyCode.P))
         {
             SaveAsPrefab();
         }
 
-        // X 键：清理
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            ExportAsFBX();
+        }
+
+        if (Input.GetKeyDown(KeyCode.O))
+        {
+            ExportAsOBJ();
+        }
+
         if (Input.GetKeyDown(KeyCode.X))
         {
             ClearAll();
         }
     }
 
+    #endregion
+
+    #region GUI
+
     void OnGUI()
     {
-        GUILayout.BeginArea(new Rect(10, 10, 450, 400));
+        GUILayout.BeginArea(new Rect(10, 10, 480, 800));
 
+        DrawTitle();
+        GUILayout.Space(10);
+
+        DrawCreateButton();
+        GUILayout.Space(10);
+
+        DrawMergeButtons();
+        GUILayout.Space(10);
+
+        DrawSaveButtons();
+        GUILayout.Space(10);
+
+        DrawClearButton();
+        GUILayout.Space(10);
+
+        DrawInfo();
+
+        GUILayout.EndArea();
+    }
+
+    private void DrawTitle()
+    {
         GUIStyle titleStyle = new GUIStyle(GUI.skin.box);
         titleStyle.fontSize = 14;
         titleStyle.fontStyle = FontStyle.Bold;
         GUILayout.Label("CSG 立方体合并演示 - 集成版", titleStyle);
+    }
 
-        GUILayout.Space(10);
-
-        // 创建立方体
+    private void DrawCreateButton()
+    {
         if (GUILayout.Button("创建立方体 (C)", GUILayout.Height(35)))
         {
             CreateCubes();
         }
+    }
 
-        GUILayout.Space(10);
+    private void DrawMergeButtons()
+    {
         GUILayout.Label("合并方案：", GUI.skin.box);
 
-        // 方案1：SimpleCSG
         if (GUILayout.Button("方案1: SimpleCSG 合并 - 去除内部面 (1)", GUILayout.Height(35)))
         {
             MergeWithSimpleCSG();
@@ -356,16 +463,37 @@ public class CSGCubeMergeDemo : MonoBehaviour
 
         GUILayout.Space(5);
 
-        // 方案2：简单合并
-        if (GUILayout.Button("方案2: 简单合并 - 保留所有面 (2)", GUILayout.Height(35)))
+        if (GUILayout.Button("方案2: Unity 原生合并 - 保留所有面 (2)", GUILayout.Height(35)))
         {
-            SimpleMerge();
+            MergeWithUnityNative();
         }
 
-        GUILayout.Space(10);
+        GUILayout.Space(5);
+
+        if (GUILayout.Button("方案3: AdvancedCSG - 完全去除内部 (3)", GUILayout.Height(35)))
+        {
+            MergeWithAdvancedCSG();
+        }
+
+        GUILayout.Space(5);
+
+        if (GUILayout.Button("方案4: TrueCSG - 真正布尔运算 (4)", GUILayout.Height(35)))
+        {
+            MergeWithTrueCSG();
+        }
+
+        GUILayout.Space(5);
+
+        if (GUILayout.Button("方案5: ProBuilder - Unity官方 (5)", GUILayout.Height(35)))
+        {
+            MergeWithProBuilder();
+        }
+    }
+
+    private void DrawSaveButtons()
+    {
         GUILayout.Label("保存选项：", GUI.skin.box);
 
-        // 保存 Mesh
         if (GUILayout.Button("保存 Mesh (M)", GUILayout.Height(35)))
         {
             SaveMergedMesh();
@@ -373,29 +501,48 @@ public class CSGCubeMergeDemo : MonoBehaviour
 
         GUILayout.Space(5);
 
-        // 保存 Prefab
         if (GUILayout.Button("保存为 Prefab (P)", GUILayout.Height(35)))
         {
             SaveAsPrefab();
         }
 
-        GUILayout.Space(10);
+        GUILayout.Space(5);
 
-        // 清理
+        if (GUILayout.Button("导出为 OBJ - Blender (O)", GUILayout.Height(35)))
+        {
+            ExportAsOBJ();
+        }
+
+        GUILayout.Space(5);
+
+        if (GUILayout.Button("导出为 FBX (F)", GUILayout.Height(35)))
+        {
+            ExportAsFBX();
+        }
+    }
+
+    private void DrawClearButton()
+    {
         if (GUILayout.Button("清理 (X)", GUILayout.Height(35)))
         {
             ClearAll();
         }
+    }
 
-        GUILayout.Space(10);
-
+    private void DrawInfo()
+    {
         GUIStyle infoStyle = new GUIStyle(GUI.skin.box);
         infoStyle.wordWrap = true;
-        GUILayout.Label("说明：\n" +
-            "• 方案1: 尝试去除交集内部面（适合移动端）\n" +
-            "• 方案2: 保留所有面，有重叠（最快）\n" +
-            "• 保存的文件在 Assets/SavedMeshes/", infoStyle);
+        infoStyle.padding = new RectOffset(10, 10, 10, 100);
 
-        GUILayout.EndArea();
+        GUILayout.Label("说明：\n" +
+            "• 方案1: 尝试去除交集内部面\n" +
+            "• 方案2: 保留所有面（最快）\n" +
+            "• 方案3: 完全去除内部顶点\n" +
+            "  和面（推荐）\n" +
+            "• 保存的文件在\n" +
+            "  Assets/SavedMeshes/", infoStyle);
     }
+
+    #endregion
 }
