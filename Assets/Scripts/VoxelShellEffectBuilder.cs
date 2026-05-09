@@ -266,8 +266,6 @@ public class VoxelShellEffectBuilder : MonoBehaviour
 
     private Mesh BuildDotMesh(bool[,,] voxels)
     {
-        HashSet<FaceKey> exposedFaces = CollectExposedFaces(voxels);
-        HashSet<DotKey> dots = new HashSet<DotKey>();
         List<Vector3> meshVertices = new List<Vector3>();
         List<int> meshTriangles = new List<int>();
 
@@ -284,12 +282,12 @@ public class VoxelShellEffectBuilder : MonoBehaviour
                 continue;
             }
 
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.right);
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.left);
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.up);
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.down);
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.forward);
-            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.back);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.right);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.left);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.up);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.down);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.forward);
+            AddFaceDot(voxels, meshVertices, meshTriangles, x, y, z, Vector3Int.back);
         }
 
         Mesh mesh = new Mesh();
@@ -301,53 +299,8 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         return mesh;
     }
 
-    private HashSet<FaceKey> CollectExposedFaces(bool[,,] voxels)
-    {
-        HashSet<FaceKey> faces = new HashSet<FaceKey>();
-        int sx = voxels.GetLength(0);
-        int sy = voxels.GetLength(1);
-        int sz = voxels.GetLength(2);
-
-        for (int x = 0; x < sx; x++)
-        for (int y = 0; y < sy; y++)
-        for (int z = 0; z < sz; z++)
-        {
-            if (!voxels[x, y, z])
-            {
-                continue;
-            }
-
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.right);
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.left);
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.up);
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.down);
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.forward);
-            AddExposedFace(voxels, faces, x, y, z, Vector3Int.back);
-        }
-
-        return faces;
-    }
-
-    private static void AddExposedFace(
+    private void AddFaceDot(
         bool[,,] voxels,
-        HashSet<FaceKey> faces,
-        int x,
-        int y,
-        int z,
-        Vector3Int normal)
-    {
-        if (IsSolid(voxels, x + normal.x, y + normal.y, z + normal.z))
-        {
-            return;
-        }
-
-        faces.Add(new FaceKey(GetFaceCenterScaled(x, y, z, normal), normal));
-    }
-
-    private void AddFaceDots(
-        bool[,,] voxels,
-        HashSet<FaceKey> exposedFaces,
-        HashSet<DotKey> dots,
         List<Vector3> vertices,
         List<int> triangles,
         int x,
@@ -360,21 +313,8 @@ public class VoxelShellEffectBuilder : MonoBehaviour
             return;
         }
 
-        Vector3[] corners = GetFaceCorners(x, y, z, normal);
-        for (int i = 0; i < corners.Length; i++)
-        {
-            Vector3 corner = corners[i];
-            Vector3Int cornerKey = ScalePoint(corner);
-            DotKey dotKey = new DotKey(cornerKey, normal);
-
-            if (dots.Contains(dotKey) || !IsInteriorFacePoint(exposedFaces, cornerKey, normal))
-            {
-                continue;
-            }
-
-            dots.Add(dotKey);
-            AddDotQuad(vertices, triangles, corner + (Vector3)normal * dotOffset, normal, dotRadius);
-        }
+        Vector3 center = GetFaceCenter(x, y, z, normal);
+        AddDotQuad(vertices, triangles, center + (Vector3)normal * dotOffset, normal, dotRadius);
     }
 
     private static Vector3[] GetFaceCorners(int x, int y, int z, Vector3Int normal)
@@ -414,31 +354,9 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         return new[] { new Vector3(x0, y0, z0), new Vector3(x0, y1, z0), new Vector3(x1, y1, z0), new Vector3(x1, y0, z0) };
     }
 
-    private static bool IsInteriorFacePoint(HashSet<FaceKey> exposedFaces, Vector3Int pointScaled, Vector3Int normal)
+    private static Vector3 GetFaceCenter(int x, int y, int z, Vector3Int normal)
     {
-        GetDotTangents(normal, out Vector3Int tangentA, out Vector3Int tangentB);
-
-        Vector3Int offsetA = tangentA * 500;
-        Vector3Int offsetB = tangentB * 500;
-
-        return exposedFaces.Contains(new FaceKey(pointScaled + offsetA + offsetB, normal)) &&
-               exposedFaces.Contains(new FaceKey(pointScaled + offsetA - offsetB, normal)) &&
-               exposedFaces.Contains(new FaceKey(pointScaled - offsetA + offsetB, normal)) &&
-               exposedFaces.Contains(new FaceKey(pointScaled - offsetA - offsetB, normal));
-    }
-
-    private static Vector3Int GetFaceCenterScaled(int x, int y, int z, Vector3Int normal)
-    {
-        Vector3 center = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + (Vector3)normal * 0.5f;
-        return ScalePoint(center);
-    }
-
-    private static Vector3Int ScalePoint(Vector3 point)
-    {
-        return new Vector3Int(
-            Mathf.RoundToInt(point.x * 1000f),
-            Mathf.RoundToInt(point.y * 1000f),
-            Mathf.RoundToInt(point.z * 1000f));
+        return new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + (Vector3)normal * 0.5f;
     }
 
     private static void AddEdge(Dictionary<EdgeKey, EdgeInfo> edges, Vector3 start, Vector3 end, Vector3Int normal)
@@ -517,26 +435,6 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         vertices.Add(center - tangentU * radius + tangentV * radius);
 
         AddQuad(triangles, baseIndex + 0, baseIndex + 1, baseIndex + 2, baseIndex + 3);
-    }
-
-    private static void GetDotTangents(Vector3Int normal, out Vector3Int tangentA, out Vector3Int tangentB)
-    {
-        if (normal.x != 0)
-        {
-            tangentA = Vector3Int.up;
-            tangentB = Vector3Int.forward;
-            return;
-        }
-
-        if (normal.y != 0)
-        {
-            tangentA = Vector3Int.right;
-            tangentB = Vector3Int.forward;
-            return;
-        }
-
-        tangentA = Vector3Int.right;
-        tangentB = Vector3Int.up;
     }
 
     private static void GetQuadTangents(Vector3Int normal, out Vector3 tangentU, out Vector3 tangentV)
@@ -687,66 +585,6 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         else
         {
             DestroyImmediate(child.gameObject);
-        }
-    }
-
-    private readonly struct FaceKey
-    {
-        private readonly Vector3Int centerScaled;
-        private readonly int normalBit;
-
-        public FaceKey(Vector3Int centerScaled, Vector3Int normal)
-        {
-            this.centerScaled = centerScaled;
-            normalBit = NormalBit(normal);
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (!(obj is FaceKey other))
-            {
-                return false;
-            }
-
-            return centerScaled == other.centerScaled && normalBit == other.normalBit;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                return (centerScaled.GetHashCode() * 397) ^ normalBit;
-            }
-        }
-    }
-
-    private readonly struct DotKey
-    {
-        private readonly Vector3Int pointScaled;
-        private readonly int normalBit;
-
-        public DotKey(Vector3Int pointScaled, Vector3Int normal)
-        {
-            this.pointScaled = pointScaled;
-            normalBit = NormalBit(normal);
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (!(obj is DotKey other))
-            {
-                return false;
-            }
-
-            return pointScaled == other.pointScaled && normalBit == other.normalBit;
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                return (pointScaled.GetHashCode() * 397) ^ normalBit;
-            }
         }
     }
 
