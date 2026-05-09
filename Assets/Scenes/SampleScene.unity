@@ -133,7 +133,6 @@ GameObject:
   - component: {fileID: 649663720}
   - component: {fileID: 649663722}
   - component: {fileID: 649663721}
-  - component: {fileID: 649663723}
   - component: {fileID: 649663724}
   m_Layer: 0
   m_Name: VoxelChunk
@@ -177,7 +176,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 8a0efb294a77f44c287e3d6c26031b41, type: 2}
+  - {fileID: 2100000, guid: d213306487e5c464a84b59c88a4ea88b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -207,21 +206,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 649663719}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &649663723
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 649663719}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f78cbbd512bc4f31867cfe768c884fc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  sizeX: 32
-  sizeY: 32
-  sizeZ: 32
 --- !u!114 &649663724
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -231,12 +215,24 @@ MonoBehaviour:
   m_GameObject: {fileID: 649663719}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b, type: 3}
+  m_Script: {fileID: 11500000, guid: d48365c147e434a10854356fe8c87365, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  angleThreshold: 40.2
-  edgeColor: {r: 0.023584902, g: 1, b: 0.092650205, a: 1}
-  edgeWidth: 0.02
+  useVoxelChunkIfAvailable: 1
+  sizeX: 16
+  sizeY: 8
+  sizeZ: 16
+  surfaceMaterial: {fileID: 0}
+  surfaceColor: {r: 0.7, g: 0.9, b: 1, a: 0.25}
+  edgeMaterial: {fileID: 0}
+  edgeColor: {r: 0, g: 0, b: 0, a: 1}
+  edgeWidth: 0.04
+  edgeOffset: 0.004
+  hardEdgeAngle: 1
+  dotMaterial: {fileID: 0}
+  dotColor: {r: 0, g: 0, b: 0, a: 1}
+  dotRadius: 0.055
+  dotOffset: 0.008
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -331,37 +327,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
---- !u!1 &925207670
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 925207672}
-  m_Layer: 0
-  m_Name: Merge
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!4 &925207672
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 925207670}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -460,5 +425,4 @@ SceneRoots:
   m_Roots:
   - {fileID: 963194228}
   - {fileID: 705507995}
-  - {fileID: 925207672}
   - {fileID: 649663720}

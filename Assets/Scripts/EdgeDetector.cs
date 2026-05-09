@@ -41,65 +41,42 @@ public class EdgeDetector : MonoBehaviour
 
         Mesh mesh = meshFilter.sharedMesh;
         Vector3[] vertices = mesh.vertices;
-        Vector3[] normals = mesh.normals;
         int[] triangles = mesh.triangles;
 
-        // 使用位置边作为key，存储所有使用该边的顶点索引和法线
-        Dictionary<PositionEdge, List<EdgeInfo>> positionEdgeMap = new Dictionary<PositionEdge, List<EdgeInfo>>();
+        // 构建边-三角形映射
+        Dictionary<Edge, List<int>> edgeToTriangles = new Dictionary<Edge, List<int>>();
 
         for (int i = 0; i < triangles.Length; i += 3)
         {
             int triIndex = i / 3;
-            Vector3 triNormal = GetTriangleNormal(mesh, triIndex);
-
-            AddPositionEdge(positionEdgeMap, vertices, normals, triangles[i], triangles[i + 1], triNormal);
-            AddPositionEdge(positionEdgeMap, vertices, normals, triangles[i + 1], triangles[i + 2], triNormal);
-            AddPositionEdge(positionEdgeMap, vertices, normals, triangles[i + 2], triangles[i], triNormal);
+            AddEdge(edgeToTriangles, triangles[i], triangles[i + 1], triIndex);
+            AddEdge(edgeToTriangles, triangles[i + 1], triangles[i + 2], triIndex);
+            AddEdge(edgeToTriangles, triangles[i + 2], triangles[i], triIndex);
         }
 
         // 检测硬边
-        HashSet<PositionEdge> drawnEdges = new HashSet<PositionEdge>();
         List<Vector3> edgePoints = new List<Vector3>();
 
-        foreach (var kvp in positionEdgeMap)
+        foreach (var kvp in edgeToTriangles)
         {
-            if (drawnEdges.Contains(kvp.Key))
-                continue;
-
-            var edgeInfos = kvp.Value;
-
-            // 检查是否有法线差异
-            bool hasHardEdge = false;
-
-            if (edgeInfos.Count == 1)
+            if (kvp.Value.Count == 2) // 共享边
             {
-                // 边界边
-                hasHardEdge = true;
-            }
-            else
-            {
-                // 检查所有法线对
-                for (int i = 0; i < edgeInfos.Count; i++)
+                Vector3 normal1 = GetTriangleNormal(mesh, kvp.Value[0]);
+                Vector3 normal2 = GetTriangleNormal(mesh, kvp.Value[1]);
+                float angle = Vector3.Angle(normal1, normal2);
+
+                if (angle > angleThreshold)
                 {
-                    for (int j = i + 1; j < edgeInfos.Count; j++)
-                    {
-                        float angle = Vector3.Angle(edgeInfos[i].normal, edgeInfos[j].normal);
-                        if (angle > angleThreshold)
-                        {
-                            hasHardEdge = true;
-                            break;
-                        }
-                    }
-                    if (hasHardEdge) break;
+                    Edge edge = kvp.Key;
+                    edgePoints.Add(transform.TransformPoint(vertices[edge.v1]));
+                    edgePoints.Add(transform.TransformPoint(vertices[edge.v2]));
                 }
             }
-
-            if (hasHardEdge)
+            else if (kvp.Value.Count == 1) // 边界边（只属于一个三角形）
             {
-                PositionEdge edge = kvp.Key;
-                edgePoints.Add(transform.TransformPoint(edge.p1));
-                edgePoints.Add(transform.TransformPoint(edge.p2));
-                drawnEdges.Add(edge);
+                Edge edge = kvp.Key;
+                edgePoints.Add(transform.TransformPoint(vertices[edge.v1]));
+                edgePoints.Add(transform.TransformPoint(vertices[edge.v2]));
             }
         }
 
@@ -110,24 +87,12 @@ public class EdgeDetector : MonoBehaviour
         }
     }
 
-    void AddPositionEdge(Dictionary<PositionEdge, List<EdgeInfo>> dict, Vector3[] vertices, Vector3[] normals, int v1, int v2, Vector3 triNormal)
+    void AddEdge(Dictionary<Edge, List<int>> dict, int v1, int v2, int triIndex)
     {
-        PositionEdge edge = new PositionEdge(vertices[v1], vertices[v2]);
+        Edge edge = new Edge(v1, v2);
         if (!dict.ContainsKey(edge))
-            dict[edge] = new List<EdgeInfo>();
-
-        dict[edge].Add(new EdgeInfo
-        {
-            v1 = v1,
-            v2 = v2,
-            normal = triNormal
-        });
-    }
-
-    struct EdgeInfo
-    {
-        public int v1, v2;
-        public Vector3 normal;
+            dict[edge] = new List<int>();
+        dict[edge].Add(triIndex);
     }
 
     Vector3 GetTriangleNormal(Mesh mesh, int triIndex)
@@ -183,43 +148,6 @@ public class EdgeDetector : MonoBehaviour
         public override int GetHashCode()
         {
             return v1.GetHashCode() ^ v2.GetHashCode();
-        }
-    }
-
-    struct PositionEdge
-    {
-        public Vector3 p1, p2;
-        private const float EPSILON = 0.0001f;
-
-        public PositionEdge(Vector3 p1, Vector3 p2)
-        {
-            // 确保p1在p2之前（按坐标排序）
-            if (p1.x < p2.x || (Mathf.Approximately(p1.x, p2.x) && p1.y < p2.y) ||
-                (Mathf.Approximately(p1.x, p2.x) && Mathf.Approximately(p1.y, p2.y) && p1.z < p2.z))
-            {
-                this.p1 = p1;
-                this.p2 = p2;
-            }
-            else
-            {
-                this.p1 = p2;
-                this.p2 = p1;
-            }
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (!(obj is PositionEdge)) return false;
-            PositionEdge other = (PositionEdge)obj;
-            return Vector3.Distance(p1, other.p1) < EPSILON && Vector3.Distance(p2, other.p2) < EPSILON;
-        }
-
-        public override int GetHashCode()
-        {
-            // 使用量化的坐标作为hash
-            int hash1 = Mathf.RoundToInt(p1.x * 1000) ^ Mathf.RoundToInt(p1.y * 1000) ^ Mathf.RoundToInt(p1.z * 1000);
-            int hash2 = Mathf.RoundToInt(p2.x * 1000) ^ Mathf.RoundToInt(p2.y * 1000) ^ Mathf.RoundToInt(p2.z * 1000);
-            return hash1 ^ hash2;
         }
     }
 }

@@ -206,8 +206,8 @@ public static class GreedyMesher
 
         return mesh;
     }
-    static Dictionary<Vector3Int, int> vertexMap =
-        new Dictionary<Vector3Int, int>();
+    static Dictionary<VertexKey, int> vertexMap =
+        new Dictionary<VertexKey, int>();
 
     static int GetVertex(
         Vector3 v,
@@ -215,10 +215,13 @@ public static class GreedyMesher
         List<Vector3> normals,
         Vector3 normal)
     {
-        Vector3Int key = new Vector3Int(
+        VertexKey key = new VertexKey(
             Mathf.RoundToInt(v.x * 1000),
             Mathf.RoundToInt(v.y * 1000),
-            Mathf.RoundToInt(v.z * 1000));
+            Mathf.RoundToInt(v.z * 1000),
+            Mathf.RoundToInt(normal.x * 1000),
+            Mathf.RoundToInt(normal.y * 1000),
+            Mathf.RoundToInt(normal.z * 1000));
 
         if (vertexMap.TryGetValue(key, out int index))
         {
@@ -280,5 +283,55 @@ public static class GreedyMesher
             1 => y,
             _ => z
         };
+    }
+
+    readonly struct VertexKey
+    {
+        readonly int x;
+        readonly int y;
+        readonly int z;
+        readonly int nx;
+        readonly int ny;
+        readonly int nz;
+
+        public VertexKey(int x, int y, int z, int nx, int ny, int nz)
+        {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.nx = nx;
+            this.ny = ny;
+            this.nz = nz;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is VertexKey other))
+            {
+                return false;
+            }
+
+            return x == other.x &&
+                   y == other.y &&
+                   z == other.z &&
+                   nx == other.nx &&
+                   ny == other.ny &&
+                   nz == other.nz;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 31 + x;
+                hash = hash * 31 + y;
+                hash = hash * 31 + z;
+                hash = hash * 31 + nx;
+                hash = hash * 31 + ny;
+                hash = hash * 31 + nz;
+                return hash;
+            }
+        }
     }
 }
