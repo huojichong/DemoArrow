@@ -251,12 +251,12 @@ public static class GreedyMesher
         int i3 = GetVertex(p3, vertices, normals, normal);
 
         triangles.Add(i0);
-        triangles.Add(i2);
         triangles.Add(i1);
+        triangles.Add(i2);
 
         triangles.Add(i0);
-        triangles.Add(i3);
         triangles.Add(i2);
+        triangles.Add(i3);
     }
 
     static bool IsSolid(bool[,,] voxels, int x, int y, int z)

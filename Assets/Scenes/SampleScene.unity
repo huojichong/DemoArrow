@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 649663722}
   - component: {fileID: 649663721}
   - component: {fileID: 649663723}
+  - component: {fileID: 649663724}
   m_Layer: 0
   m_Name: VoxelChunk
   m_TagString: Untagged
@@ -176,7 +177,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 965adef5b40fe4f158ef92c6f34ca568, type: 2}
+  - {fileID: 2100000, guid: 8a0efb294a77f44c287e3d6c26031b41, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -205,8 +206,23 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 649663719}
-  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!114 &649663723
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 649663719}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f78cbbd512bc4f31867cfe768c884fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sizeX: 32
+  sizeY: 32
+  sizeZ: 32
+--- !u!114 &649663724
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -215,12 +231,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 649663719}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f78cbbd512bc4f31867cfe768c884fc, type: 3}
+  m_Script: {fileID: 11500000, guid: 9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sizeX: 32
-  sizeY: 32
-  sizeZ: 32
+  angleThreshold: 40.2
+  edgeColor: {r: 0.023584902, g: 1, b: 0.092650205, a: 1}
+  edgeWidth: 0.02
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
