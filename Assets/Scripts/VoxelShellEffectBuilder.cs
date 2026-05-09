@@ -266,7 +266,11 @@ public class VoxelShellEffectBuilder : MonoBehaviour
 
     private Mesh BuildDotMesh(bool[,,] voxels)
     {
-        Dictionary<Vector3Int, Vector3> points = new Dictionary<Vector3Int, Vector3>();
+        HashSet<FaceKey> exposedFaces = CollectExposedFaces(voxels);
+        HashSet<DotKey> dots = new HashSet<DotKey>();
+        List<Vector3> meshVertices = new List<Vector3>();
+        List<int> meshTriangles = new List<int>();
+
         int sx = voxels.GetLength(0);
         int sy = voxels.GetLength(1);
         int sz = voxels.GetLength(2);
@@ -280,20 +284,12 @@ public class VoxelShellEffectBuilder : MonoBehaviour
                 continue;
             }
 
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.right);
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.left);
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.up);
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.down);
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.forward);
-            AddFaceDots(voxels, points, x, y, z, Vector3Int.back);
-        }
-
-        List<Vector3> meshVertices = new List<Vector3>();
-        List<int> meshTriangles = new List<int>();
-
-        foreach (Vector3 point in points.Values)
-        {
-            AddOctahedron(meshVertices, meshTriangles, point, dotRadius);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.right);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.left);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.up);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.down);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.forward);
+            AddFaceDots(voxels, exposedFaces, dots, meshVertices, meshTriangles, x, y, z, Vector3Int.back);
         }
 
         Mesh mesh = new Mesh();
@@ -305,9 +301,55 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         return mesh;
     }
 
+    private HashSet<FaceKey> CollectExposedFaces(bool[,,] voxels)
+    {
+        HashSet<FaceKey> faces = new HashSet<FaceKey>();
+        int sx = voxels.GetLength(0);
+        int sy = voxels.GetLength(1);
+        int sz = voxels.GetLength(2);
+
+        for (int x = 0; x < sx; x++)
+        for (int y = 0; y < sy; y++)
+        for (int z = 0; z < sz; z++)
+        {
+            if (!voxels[x, y, z])
+            {
+                continue;
+            }
+
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.right);
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.left);
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.up);
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.down);
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.forward);
+            AddExposedFace(voxels, faces, x, y, z, Vector3Int.back);
+        }
+
+        return faces;
+    }
+
+    private static void AddExposedFace(
+        bool[,,] voxels,
+        HashSet<FaceKey> faces,
+        int x,
+        int y,
+        int z,
+        Vector3Int normal)
+    {
+        if (IsSolid(voxels, x + normal.x, y + normal.y, z + normal.z))
+        {
+            return;
+        }
+
+        faces.Add(new FaceKey(GetFaceCenterScaled(x, y, z, normal), normal));
+    }
+
     private void AddFaceDots(
         bool[,,] voxels,
-        Dictionary<Vector3Int, Vector3> points,
+        HashSet<FaceKey> exposedFaces,
+        HashSet<DotKey> dots,
+        List<Vector3> vertices,
+        List<int> triangles,
         int x,
         int y,
         int z,
@@ -319,20 +361,19 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         }
 
         Vector3[] corners = GetFaceCorners(x, y, z, normal);
-        Vector3 offset = (Vector3)normal * dotOffset;
-
         for (int i = 0; i < corners.Length; i++)
         {
             Vector3 corner = corners[i];
-            Vector3Int key = new Vector3Int(
-                Mathf.RoundToInt(corner.x * 1000f),
-                Mathf.RoundToInt(corner.y * 1000f),
-                Mathf.RoundToInt(corner.z * 1000f));
+            Vector3Int cornerKey = ScalePoint(corner);
+            DotKey dotKey = new DotKey(cornerKey, normal);
 
-            if (!points.ContainsKey(key))
+            if (dots.Contains(dotKey) || !IsInteriorFacePoint(exposedFaces, cornerKey, normal))
             {
-                points.Add(key, corner + offset);
+                continue;
             }
+
+            dots.Add(dotKey);
+            AddDotQuad(vertices, triangles, corner + (Vector3)normal * dotOffset, normal, dotRadius);
         }
     }
 
@@ -371,6 +412,33 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         }
 
         return new[] { new Vector3(x0, y0, z0), new Vector3(x0, y1, z0), new Vector3(x1, y1, z0), new Vector3(x1, y0, z0) };
+    }
+
+    private static bool IsInteriorFacePoint(HashSet<FaceKey> exposedFaces, Vector3Int pointScaled, Vector3Int normal)
+    {
+        GetDotTangents(normal, out Vector3Int tangentA, out Vector3Int tangentB);
+
+        Vector3Int offsetA = tangentA * 500;
+        Vector3Int offsetB = tangentB * 500;
+
+        return exposedFaces.Contains(new FaceKey(pointScaled + offsetA + offsetB, normal)) &&
+               exposedFaces.Contains(new FaceKey(pointScaled + offsetA - offsetB, normal)) &&
+               exposedFaces.Contains(new FaceKey(pointScaled - offsetA + offsetB, normal)) &&
+               exposedFaces.Contains(new FaceKey(pointScaled - offsetA - offsetB, normal));
+    }
+
+    private static Vector3Int GetFaceCenterScaled(int x, int y, int z, Vector3Int normal)
+    {
+        Vector3 center = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) + (Vector3)normal * 0.5f;
+        return ScalePoint(center);
+    }
+
+    private static Vector3Int ScalePoint(Vector3 point)
+    {
+        return new Vector3Int(
+            Mathf.RoundToInt(point.x * 1000f),
+            Mathf.RoundToInt(point.y * 1000f),
+            Mathf.RoundToInt(point.z * 1000f));
     }
 
     private static void AddEdge(Dictionary<EdgeKey, EdgeInfo> edges, Vector3 start, Vector3 end, Vector3Int normal)
@@ -433,24 +501,83 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         AddQuad(triangles, baseIndex + 4, baseIndex + 7, baseIndex + 6, baseIndex + 5);
     }
 
-    private static void AddOctahedron(List<Vector3> vertices, List<int> triangles, Vector3 center, float radius)
+    private static void AddDotQuad(
+        List<Vector3> vertices,
+        List<int> triangles,
+        Vector3 center,
+        Vector3Int normal,
+        float radius)
     {
-        int baseIndex = vertices.Count;
-        vertices.Add(center + Vector3.up * radius);
-        vertices.Add(center + Vector3.right * radius);
-        vertices.Add(center + Vector3.forward * radius);
-        vertices.Add(center + Vector3.left * radius);
-        vertices.Add(center + Vector3.back * radius);
-        vertices.Add(center + Vector3.down * radius);
+        GetQuadTangents(normal, out Vector3 tangentU, out Vector3 tangentV);
 
-        AddTriangle(triangles, baseIndex + 0, baseIndex + 1, baseIndex + 2);
-        AddTriangle(triangles, baseIndex + 0, baseIndex + 2, baseIndex + 3);
-        AddTriangle(triangles, baseIndex + 0, baseIndex + 3, baseIndex + 4);
-        AddTriangle(triangles, baseIndex + 0, baseIndex + 4, baseIndex + 1);
-        AddTriangle(triangles, baseIndex + 5, baseIndex + 2, baseIndex + 1);
-        AddTriangle(triangles, baseIndex + 5, baseIndex + 3, baseIndex + 2);
-        AddTriangle(triangles, baseIndex + 5, baseIndex + 4, baseIndex + 3);
-        AddTriangle(triangles, baseIndex + 5, baseIndex + 1, baseIndex + 4);
+        int baseIndex = vertices.Count;
+        vertices.Add(center - tangentU * radius - tangentV * radius);
+        vertices.Add(center + tangentU * radius - tangentV * radius);
+        vertices.Add(center + tangentU * radius + tangentV * radius);
+        vertices.Add(center - tangentU * radius + tangentV * radius);
+
+        AddQuad(triangles, baseIndex + 0, baseIndex + 1, baseIndex + 2, baseIndex + 3);
+    }
+
+    private static void GetDotTangents(Vector3Int normal, out Vector3Int tangentA, out Vector3Int tangentB)
+    {
+        if (normal.x != 0)
+        {
+            tangentA = Vector3Int.up;
+            tangentB = Vector3Int.forward;
+            return;
+        }
+
+        if (normal.y != 0)
+        {
+            tangentA = Vector3Int.right;
+            tangentB = Vector3Int.forward;
+            return;
+        }
+
+        tangentA = Vector3Int.right;
+        tangentB = Vector3Int.up;
+    }
+
+    private static void GetQuadTangents(Vector3Int normal, out Vector3 tangentU, out Vector3 tangentV)
+    {
+        if (normal == Vector3Int.right)
+        {
+            tangentU = Vector3.up;
+            tangentV = Vector3.forward;
+            return;
+        }
+
+        if (normal == Vector3Int.left)
+        {
+            tangentU = Vector3.forward;
+            tangentV = Vector3.up;
+            return;
+        }
+
+        if (normal == Vector3Int.up)
+        {
+            tangentU = Vector3.forward;
+            tangentV = Vector3.right;
+            return;
+        }
+
+        if (normal == Vector3Int.down)
+        {
+            tangentU = Vector3.right;
+            tangentV = Vector3.forward;
+            return;
+        }
+
+        if (normal == Vector3Int.forward)
+        {
+            tangentU = Vector3.right;
+            tangentV = Vector3.up;
+            return;
+        }
+
+        tangentU = Vector3.up;
+        tangentV = Vector3.right;
     }
 
     private static void AddQuad(List<int> triangles, int a, int b, int c, int d)
@@ -461,13 +588,6 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         triangles.Add(a);
         triangles.Add(c);
         triangles.Add(d);
-    }
-
-    private static void AddTriangle(List<int> triangles, int a, int b, int c)
-    {
-        triangles.Add(a);
-        triangles.Add(b);
-        triangles.Add(c);
     }
 
     private static bool IsSolid(bool[,,] voxels, int x, int y, int z)
@@ -567,6 +687,66 @@ public class VoxelShellEffectBuilder : MonoBehaviour
         else
         {
             DestroyImmediate(child.gameObject);
+        }
+    }
+
+    private readonly struct FaceKey
+    {
+        private readonly Vector3Int centerScaled;
+        private readonly int normalBit;
+
+        public FaceKey(Vector3Int centerScaled, Vector3Int normal)
+        {
+            this.centerScaled = centerScaled;
+            normalBit = NormalBit(normal);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is FaceKey other))
+            {
+                return false;
+            }
+
+            return centerScaled == other.centerScaled && normalBit == other.normalBit;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (centerScaled.GetHashCode() * 397) ^ normalBit;
+            }
+        }
+    }
+
+    private readonly struct DotKey
+    {
+        private readonly Vector3Int pointScaled;
+        private readonly int normalBit;
+
+        public DotKey(Vector3Int pointScaled, Vector3Int normal)
+        {
+            this.pointScaled = pointScaled;
+            normalBit = NormalBit(normal);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is DotKey other))
+            {
+                return false;
+            }
+
+            return pointScaled == other.pointScaled && normalBit == other.normalBit;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (pointScaled.GetHashCode() * 397) ^ normalBit;
+            }
         }
     }
 
@@ -686,14 +866,15 @@ public class VoxelShellEffectBuilder : MonoBehaviour
             }
         }
 
-        private static int NormalBit(Vector3Int normal)
-        {
-            if (normal == Vector3Int.right) return 1 << 0;
-            if (normal == Vector3Int.left) return 1 << 1;
-            if (normal == Vector3Int.up) return 1 << 2;
-            if (normal == Vector3Int.down) return 1 << 3;
-            if (normal == Vector3Int.forward) return 1 << 4;
-            return 1 << 5;
-        }
+    }
+
+    private static int NormalBit(Vector3Int normal)
+    {
+        if (normal == Vector3Int.right) return 1 << 0;
+        if (normal == Vector3Int.left) return 1 << 1;
+        if (normal == Vector3Int.up) return 1 << 2;
+        if (normal == Vector3Int.down) return 1 << 3;
+        if (normal == Vector3Int.forward) return 1 << 4;
+        return 1 << 5;
     }
 }
